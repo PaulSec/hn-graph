@@ -1,0 +1,13 @@
+services:
+  hn-graph:
+    build: .
+    container_name: hn-graph
+    restart: unless-stopped
+    ports:
+      - "${HOST_PORT:-8000}:8000"
+    environment:
+      POLL_INTERVAL: ${POLL_INTERVAL:-300}
+      TOP_N: ${TOP_N:-30}
+      RETENTION_DAYS: ${RETENTION_DAYS:-7}
+    volumes:
+      - ./data:/app/data

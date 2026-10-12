@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HN Graph — Hacker News front page, live</title>
+    <link rel="icon"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='3' fill='%23ff6600'/><text x='8' y='12.5' font-size='11' font-family='Verdana' font-weight='bold' fill='white' text-anchor='middle'>Y</text></svg>" />
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+    <style>
+        :root {
+            --bg: #0d0d0f;
+            --panel: #141418;
+            --border: #222228;
+            --text: #e8e8ea;
+            --muted: #7a7a85;
+            --accent: #ff6600;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            margin: 0;
+            height: 100%;
+            background: var(--bg);
+            color: var(--text);
+            font: 14px/1.4 ui-sans-serif, -apple-system, "Inter", "Segoe UI", Roboto, sans-serif;
+        }
+
+        a {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .app {
+            display: grid;
+            grid-template-rows: auto 1fr;
+            height: 100vh;
+        }
+
+        header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 16px 24px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .logo {
+            width: 22px;
+            height: 22px;
+            border-radius: 5px;
+            background: var(--accent);
+            color: #fff;
+            display: grid;
+            place-items: center;
+            font-weight: 700;
+            font-size: 13px;
+        }
+
+        h1 {
+            font-size: 15px;
+            font-weight: 600;
+            margin: 0;
+            letter-spacing: .2px;
+        }
+
+        .status {
+            color: var(--muted);
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #3ddc84;
+            box-shadow: 0 0 8px #3ddc84;
+        }
+
+        .spacer {
+            flex: 1;
+        }
+
+        .seg {
+            display: inline-flex;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .seg button {
+            background: transparent;
+            color: var(--muted);
+            border: 0;
+            padding: 6px 12px;
+            font: inherit;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .seg button.active {
+            background: var(--panel);
+            color: var(--text);
+        }
+
+        .seg button:hover {
+            color: var(--text);
+        }
+
+        main {
+            display: grid;
+            grid-template-columns: 1fr 340px;
+            min-height: 0;
+        }
+
+        .chart-wrap {
+            position: relative;
+            min-height: 0;
+        }
+
+        #chart {
+            position: absolute;
+            inset: 0;
+        }
+
+        .empty {
+            position: absolute;
+            inset: 0;
+            display: grid;
+            place-items: center;
+            color: var(--muted);
+        }
+
+        .empty[hidden] {
+            display: none;
+        }
+
+        aside {
+            border-left: 1px solid var(--border);
+            overflow-y: auto;
+        }
+
+        aside h2 {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--muted);
+            font-weight: 500;
+            margin: 0;
+            padding: 16px 20px 8px;
+            position: sticky;
+            top: 0;
+            background: var(--bg);
+        }
+
+        ol {
+            list-style: none;
+            margin: 0;
+            padding: 0 8px 16px;
+        }
+
+        li a {
+            display: grid;
+            grid-template-columns: 22px 1fr auto;
+            gap: 10px;
+            align-items: start;
+            padding: 8px 12px;
+            border-radius: 8px;
+        }
+
+        li a:hover,
+        li a.hl {
+            background: var(--panel);
+        }
+
+        .rank {
+            color: var(--muted);
+            font-variant-numeric: tabular-nums;
+            font-size: 12px;
+            padding-top: 1px;
+        }
+
+        .title {
+            font-size: 13px;
+            overflow: hidden;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+        }
+
+        .meta {
+            color: var(--muted);
+            font-size: 11px;
+            margin-top: 2px;
+        }
+
+        .pts {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+            font-size: 12px;
+        }
+
+        .pts small {
+            display: block;
+            color: #3ddc84;
+            font-size: 11px;
+        }
+
+        .swatch {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 2px;
+            margin-right: 6px;
+        }
+
+        @media (max-width: 860px) {
+            .app {
+                height: auto;
+            }
+
+            main {
+                grid-template-columns: 1fr;
+            }
+
+            .chart-wrap {
+                height: 60vh;
+            }
+
+            aside {
+                border-left: 0;
+                border-top: 1px solid var(--border);
+            }
+
+            header {
+                flex-wrap: wrap;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app">
+        <header>
+            <div class="logo">Y</div>
+            <h1>HN Graph</h1>
+            <span class="status"><span class="dot"></span><span id="updated">loading…</span></span>
+            <span class="spacer"></span>
+            <div class="seg" id="metric">
+                <button data-v="score" class="active">Points</button>
+                <button data-v="rank">Rank</button>
+            </div>
+            <div class="seg" id="range">
+                <button data-v="6">6h</button>
+                <button data-v="12">12h</button>
+                <button data-v="24" class="active">24h</button>
+            </div>
+        </header>
+        <main>
+            <div class="chart-wrap">
+                <div id="chart"></div>
+                <div class="empty" id="empty" hidden>No data yet — the first snapshot is on its way.</div>
+            </div>
+            <aside>
+                <h2>Front page now</h2>
+                <ol id="list"></ol>
+            </aside>
+        </main>
+    </div>
+
+    <script>
+        const HN_ITEM = id => `https://news.ycombinator.com/item?id=${encodeURIComponent(id)}`;
+        const state = { metric: "score", hours: 24, stories: [] };
+        const chart = echarts.init(document.getElementById("chart"), null, { renderer: "canvas" });
+
+        const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+        const domain = url => { try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return "news.ycombinator.com"; } };
+        const color = id => `hsl(${(id * 137.508) % 360}, 75%, 62%)`;
+        const fmtTime = ts => new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        const ago = s => { const m = Math.round((Date.now() / 1000 - s) / 60); return m < 1 ? "just now" : m < 60 ? `${m} min ago` : `${Math.round(m / 60)}h ago`; };
+
+        function render() {
+            const { stories, metric } = state;
+            document.getElementById("empty").hidden = stories.length > 0;
+            const isRank = metric === "rank";
+
+            chart.setOption({
+                backgroundColor: "transparent",
+                animationDuration: 400,
+                grid: { left: 56, right: 24, top: 24, bottom: 40 },
+                tooltip: {
+                    trigger: "item",
+                    backgroundColor: "#1a1a20",
+                    borderColor: "#2a2a32",
+                    padding: [10, 12],
+                    textStyle: { color: "#e8e8ea", fontSize: 12 },
+                    extraCssText: "max-width:360px;white-space:normal;border-radius:10px;box-shadow:0 8px 30px rgba(0,0,0,.5)",
+                    formatter: p => {
+                        const s = stories[p.seriesIndex];
+                        const [ts, score, rank, comments] = p.data.raw;
+                        return `<div style="font-weight:600;margin-bottom:4px">${esc(s.title)}</div>
+          <div style="color:#7a7a85;margin-bottom:6px">${esc(domain(s.url))} · by ${esc(s.author)}</div>
+          <div><span class="swatch" style="background:${color(s.id)}"></span>
+          <b>${score}</b> pts · #${rank} · ${comments} comments · ${fmtTime(ts)}</div>
+          <div style="color:#ff6600;margin-top:6px;font-size:11px">Click to open on Hacker News →</div>`;
+                    },
+                },
+                xAxis: {
+                    type: "time",
+                    axisLine: { lineStyle: { color: "#2a2a32" } },
+                    axisLabel: { color: "#7a7a85", hideOverlap: true },
+                    splitLine: { show: false },
+                },
+                yAxis: {
+                    type: "value",
+                    inverse: isRank,
+                    min: isRank ? 1 : 0,
+                    max: isRank ? "dataMax" : null,
+                    axisLabel: { color: "#7a7a85" },
+                    splitLine: { lineStyle: { color: "#1c1c22" } },
+                },
+                dataZoom: [{ type: "inside", filterMode: "none" }],
+                series: stories.map(s => ({
+                    id: String(s.id),
+                    name: s.title,
+                    type: "line",
+                    step: isRank ? "end" : false,
+                    triggerLineEvent: true,
+                    showSymbol: true,
+                    symbol: "circle",
+                    symbolSize: 4,
+                    lineStyle: { width: 1.6, color: color(s.id) },
+                    itemStyle: { color: color(s.id) },
+                    emphasis: { focus: "series", lineStyle: { width: 3.5 }, scale: 2 },
+                    blur: { lineStyle: { opacity: 0.08 }, itemStyle: { opacity: 0.08 } },
+                    cursor: "pointer",
+                    data: s.points.map(pt => ({ value: [pt[0] * 1000, isRank ? pt[2] : pt[1]], raw: [pt[0] * 1000, pt[1], pt[2], pt[3]] })),
+                })),
+            }, { replaceMerge: ["series"] });
+
+            renderList();
+        }
+
+        function renderList() {
+            const { stories, updatedAt } = state;
+            const current = stories
+                .map((s, idx) => ({ s, idx, last: s.points[s.points.length - 1] }))
+                .filter(x => x.last[0] === updatedAt)
+                .sort((a, b) => a.last[2] - b.last[2]);
+
+            document.getElementById("list").innerHTML = current.map(({ s, idx, last }) => {
+                const gained = last[1] - s.points[0][1];
+                return `<li><a href="${HN_ITEM(s.id)}" target="_blank" rel="noopener" data-idx="${idx}">
+      <span class="rank">${last[2]}</span>
+      <span><div class="title"><span class="swatch" style="background:${color(s.id)}"></span>${esc(s.title)}</div>
+        <div class="meta">${esc(domain(s.url))} · ${last[3]} comments</div></span>
+      <span class="pts">${last[1]}${gained > 0 ? `<small>+${gained}</small>` : ""}</span>
+    </a></li>`;
+            }).join("");
+        }
+
+        // Sidebar hover <-> chart highlight
+        const list = document.getElementById("list");
+        list.addEventListener("mouseover", e => {
+            const a = e.target.closest("a[data-idx]");
+            if (a) chart.dispatchAction({ type: "highlight", seriesIndex: +a.dataset.idx, dataIndex: 0 });
+        });
+        list.addEventListener("mouseout", e => {
+            const a = e.target.closest("a[data-idx]");
+            if (a) chart.dispatchAction({ type: "downplay", seriesIndex: +a.dataset.idx, dataIndex: 0 });
+        });
+        const clearHl = () => list.querySelectorAll("a.hl").forEach(a => a.classList.remove("hl"));
+        chart.on("mouseover", p => {
+            clearHl();
+            const a = list.querySelector(`a[data-idx="${p.seriesIndex}"]`);
+            a?.classList.add("hl");
+            a?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        });
+        chart.on("mouseout", clearHl);
+        chart.on("globalout", clearHl);
+        chart.on("click", p => {
+            const s = state.stories[p.seriesIndex];
+            if (s) window.open(HN_ITEM(s.id), "_blank", "noopener");
+        });
+
+        async function load() {
+            const res = await fetch(`/api/data?hours=${state.hours}`);
+            const data = await res.json();
+            state.stories = data.stories;
+            state.updatedAt = data.updated_at;
+            document.getElementById("updated").textContent = data.updated_at
+                ? `updated ${ago(data.updated_at)} · every ${data.poll_interval < 60 ? `${data.poll_interval}s` : `${Math.round(data.poll_interval / 60)} min`}`
+                : "waiting for first snapshot…";
+            render();
+        }
+
+        function bindSeg(id, key, cast) {
+            document.getElementById(id).addEventListener("click", e => {
+                const b = e.target.closest("button");
+                if (!b) return;
+                document.querySelectorAll(`#${id} button`).forEach(x => x.classList.toggle("active", x === b));
+                state[key] = cast(b.dataset.v);
+                key === "hours" ? load() : render();
+            });
+        }
+        bindSeg("metric", "metric", String);
+        bindSeg("range", "hours", Number);
+
+        window.addEventListener("resize", () => chart.resize());
+        load();
+        setInterval(load, 60_000);
+    </script>
+</body>
+
+</html>
